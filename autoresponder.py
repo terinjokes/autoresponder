@@ -19,10 +19,7 @@ def makeIMAPConnection(server, port, ssl, username, password):
 def hasNewMail(imapServer):
     status, data = imapServer.status('INBOX', '(UNSEEN)')
     unreadcount = int(data[0].split()[2].strip(').,]'))
-    if unreadcount > 0:
-        return True
-    else:
-        return False
+    return unreadcount > 0
 
 
 def UIDsForNewEmail(imapServer):
