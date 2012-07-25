@@ -13,16 +13,16 @@ from email.mime.text import MIMEText
 
 
 def makeIMAPServer(server, port, ssl, username, password):
-    imapServer = imaplib.IMAP4_SSL(server, port) if ssl else \
-            imaplib.IMAP(server, port)
+    imapServer = (imaplib.IMAP4_SSL(server, port) if ssl else
+            imaplib.IMAP(server, port))
     imapServer.login(username, password)
     imapServer.select('INBOX')
     return imapServer
 
 
 def makeSMTPServer(server, port, ssl, username, password):
-    smtpServer = smtplib.SMTP_SSL(server, port) if ssl else \
-            smtplib.SMTP(server, port)
+    smtpServer = (smtplib.SMTP_SSL(server, port) if ssl else
+            smtplib.SMTP(server, port))
     smtpServer.login(username, password)
     return smtpServer
 
