@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # vim: set fileencoding=utf-8 :
 import imaplib
 import smtplib
@@ -6,6 +6,7 @@ import email
 import time
 import sys
 import yaml
+import argparse
 from email.mime.text import MIMEText
 
 
@@ -59,9 +60,15 @@ def genForConfig(config):
         smtpServer.quit()
 
 
-def main(args):
-    fileObj = open(args[1], 'r')
-    config = yaml.load(fileObj)
+def parseArgs():
+    parser = argparse.ArgumentParser(description='Autorespond to new emails.')
+    parser.add_argument('config', type=file)
+    return parser.parse_args()
+
+
+def main():
+    args = parseArgs()
+    config = yaml.load(args.config)
     for (imapServer, smtpServer, smtpFrom, emailBody) in genForConfig(config):
         if hasNewMail(imapServer):
             uids = UIDsForNewEmail(imapServer)
@@ -82,9 +89,8 @@ def main(args):
                 smtpServer.sendmail(smtpFrom,
                         replyObj['To'],
                         replyObj.as_string())
-    fileObj.close()
-    return None
+    args.config.close()
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(main())
