@@ -7,6 +7,7 @@ import time
 import sys
 import yaml
 import argparse
+import logging
 from email.mime.text import MIMEText
 
 # pragma mark - Server Connections
@@ -28,6 +29,8 @@ def makeSMTPServer(server, port, ssl, username, password):
 
 
 def makeIMAPServerWithConfig(imapConfig):
+    logging.info("Connecting to %s:%i as %s" % (imapConfig["server"],
+            imapConfig["port"], imapConfig["username"]))
     imapServer = makeIMAPServer(imapConfig["server"],
             imapConfig["port"], imapConfig["ssl"], imapConfig["username"],
             imapConfig["password"])
@@ -35,6 +38,8 @@ def makeIMAPServerWithConfig(imapConfig):
 
 
 def makeSMTPServerWithConfig(smtpConfig):
+    logging.info("Connecting to %s:%i as %s" % (smtpConfig["server"],
+            smtpConfig["port"], smtpConfig["username"]))
     smtpServer = makeSMTPServer(smtpConfig["server"],
             smtpConfig["port"], smtpConfig["ssl"], smtpConfig["username"],
             smtpConfig["password"])
@@ -45,20 +50,27 @@ def makeSMTPServerWithConfig(smtpConfig):
 
 def hasNewMail(imapServer):
     status, data = imapServer.status('INBOX', '(UNSEEN)')
+    logging.debug("%s %s" % (status, data))
     unreadcount = int(data[0].split()[2].strip(').,]'))
+    logging.info("There are %i unseen emails" % unreadcount)
     return unreadcount > 0
 
 
 def UIDsForNewEmail(imapServer):
     status, data = imapServer.uid('search', None, '(UNSEEN)')
+    logging.debug("%s %s" % (status, data))
     uids = data[0].split()
     return uids
 
 
 def emailForUID(uid, imapServer):
-    _, data = imapServer.uid('fetch', uid, '(RFC822)')
+    logging.info("Fetching email with uid: %s", uid)
+    status, data = imapServer.uid('fetch', uid, '(RFC822)')
+    logging.debug("%s" % status)
     raw_email = data[0][1]
     emailObj = email.message_from_string(raw_email)
+    logging.info("From: %s. Subject: %s" % (emailObj['From'],
+        emailObj['Subject']))
     return emailObj
 
 
@@ -66,6 +78,7 @@ def emailForUID(uid, imapServer):
 
 
 def replyWithOriginalEmail(emailObj, fromAddress, body):
+    logging.info("Creating reply")
     replyObj = MIMEText(body, _charset="utf-8")
     # TODO (Terin Stock): Do I need to ensure these are clean,
     # or does 'email' handle that?
@@ -85,12 +98,24 @@ def replyWithOriginalEmail(emailObj, fromAddress, body):
 def parseArgs():
     parser = argparse.ArgumentParser(description='Autorespond to new emails.')
     parser.add_argument('config', type=file, help="YAML configuration file")
+    parser.add_argument('--log', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR',
+        'CRITICAL'], type=(lambda string: string.upper()),
+        help="Set the log level.")
     return parser.parse_args()
+
+
+def setupLogging(loglevel):
+    if loglevel:
+        numeric_level = getattr(logging, loglevel, None)
+        logging.basicConfig(level=numeric_level)
 
 
 def main():
     args = parseArgs()
+    setupLogging(args.log)
+    logging.debug(args)
     config = yaml.load(args.config)
+    logging.debug(config)
     args.config.close()
     for server in config:
         imapServer = makeIMAPServerWithConfig(server['imap'])
@@ -105,9 +130,11 @@ def main():
                 smtpServer.sendmail(server['smtp']['from'],
                         replyObj['To'],
                         replyObj.as_string())
+                logging.info("Email sent")
             smtpServer.quit()
         imapServer.close()
         imapServer.logout()
+        logging.info("We're all done here")
 
 
 if __name__ == "__main__":
