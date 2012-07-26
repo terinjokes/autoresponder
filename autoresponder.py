@@ -84,7 +84,7 @@ def replyWithOriginalEmail(emailObj, fromAddress, body):
 
 def parseArgs():
     parser = argparse.ArgumentParser(description='Autorespond to new emails.')
-    parser.add_argument('config', type=file)
+    parser.add_argument('config', type=file, help="YAML configuration file")
     return parser.parse_args()
 
 
