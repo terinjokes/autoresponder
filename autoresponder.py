@@ -49,16 +49,26 @@ def makeSMTPServerWithConfig(smtpConfig):
 
 
 def hasNewMail(imapServer):
-    status, data = imapServer.status('INBOX', '(UNSEEN)')
+    try:
+        status, data = imapServer.status('INBOX', '(UNSEEN)')
+    except imaplib.IMAP4.error:
+        logging.exception("Unable to check for new emails")
     logging.debug("%s %s" % (status, data))
+    if status != "OK":
+        return False
     unreadcount = int(data[0].split()[2].strip(').,]'))
     logging.info("There are %i unseen emails" % unreadcount)
     return unreadcount > 0
 
 
 def UIDsForNewEmail(imapServer):
-    status, data = imapServer.uid('search', None, '(UNSEEN)')
+    try:
+        status, data = imapServer.uid('search', None, '(UNSEEN)')
+    except imaplib.IMAP4.error:
+        logging.exception("Was unable to retrieve UIDs for new emails")
     logging.debug("%s %s" % (status, data))
+    if status != "OK":
+        return []
     uids = data[0].split()
     return uids
 
@@ -89,7 +99,7 @@ def moveMessage(uid, folder, imapServer, supportsGmailExtensions=False):
         else:
             logging.warning("Unable to apply label to message %s", uid)
     else:
-        logging.info("Copying message to folder %s" % folder);
+        logging.info("Copying message to folder %s" % folder)
         status, _ = imapServer.uid('copy', uid, folder)
         if status == "OK":
             logging.info("Adding deleted flag to message")
@@ -139,18 +149,41 @@ def main():
     args = parseArgs()
     setupLogging(args.log)
     logging.debug(args)
-    config = yaml.load(args.config)
+    try:
+        config = yaml.load(args.config)
+    except yaml.YAMLError:
+        logging.exception("Unable to parse the configuration file %s"
+                % args.config)
+        return 1
     logging.debug(config)
     args.config.close()
     for server in config:
-        imapServer = makeIMAPServerWithConfig(server['imap'])
+        try:
+            imapServer = makeIMAPServerWithConfig(server['imap'])
+        except imaplib.IMAP4.error:
+            logging.exception("There was an error logging into the IMAP"
+                    "server")
+            imapServer.close()
+            imapServer.logout()
+            continue  # next server configuration
         logging.debug(imapServer.capabilities)
         supportsExtensions = hasGmailExtensions(imapServer)
         if hasNewMail(imapServer):
-            smtpServer = makeSMTPServerWithConfig(server['smtp'])
+            try:
+                smtpServer = makeSMTPServerWithConfig(server['smtp'])
+            except smtplib.SMTPException:
+                logging.exception("There was an error logging into the SMTP"
+                        " server")
+                smtpServer.quit()
+                continue  # next server configuration
             uids = UIDsForNewEmail(imapServer)
             for uid in uids:
-                emailObj = emailForUID(uid, imapServer)
+                try:
+                    emailObj = emailForUID(uid, imapServer)
+                except imaplib.IMAP4.error:
+                    logging.exception("Was unable to fetch email from"
+                            "server")
+                    continue  # next UID
                 replyObj = replyWithOriginalEmail(emailObj,
                         server['smtp']['from'],
                         server['body'])
