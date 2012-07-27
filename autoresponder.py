@@ -74,6 +74,31 @@ def emailForUID(uid, imapServer):
     return emailObj
 
 
+def hasGmailExtensions(imapServer):
+    return "X-GM-EXT-1" in imapServer.capabilities
+
+
+def moveMessage(uid, folder, imapServer, supportsGmailExtensions=False):
+    if supportsGmailExtensions:
+        logging.info('Adding Gmail label: %s' % folder)
+        status, _ = imapServer.uid('store', uid, "+X-GM-LABELS", folder)
+        if status == "OK":
+            logging.info("Removing Gmail label: Inbox")
+            status, _ = imapServer.uid('store', uid, "-X-GM-LABELS", "\\Inbox")
+            logging.debug(status)
+        else:
+            logging.warning("Unable to apply label to message %s", uid)
+    else:
+        logging.info("Copying message to folder %s" % folder);
+        status, _ = imapServer.uid('copy', uid, folder)
+        if status == "OK":
+            logging.info("Adding deleted flag to message")
+            imapServer('store', uid, '+FLAGS', '(\Deleted)')
+            imapServer.expunge()
+        else:
+            logging.warning("Unable to apply copy message %s", uid)
+
+
 #pragma mark -
 
 
@@ -119,6 +144,8 @@ def main():
     args.config.close()
     for server in config:
         imapServer = makeIMAPServerWithConfig(server['imap'])
+        logging.debug(imapServer.capabilities)
+        supportsExtensions = hasGmailExtensions(imapServer)
         if hasNewMail(imapServer):
             smtpServer = makeSMTPServerWithConfig(server['smtp'])
             uids = UIDsForNewEmail(imapServer)
@@ -131,6 +158,8 @@ def main():
                         replyObj['To'],
                         replyObj.as_string())
                 logging.info("Email sent")
+                moveMessage(uid, server["imap"]["move_folder"], imapServer,
+                        supportsExtensions)
             smtpServer.quit()
         imapServer.close()
         imapServer.logout()

@@ -5,6 +5,7 @@
     ssl: yes
     username: user@domain.tld
     password: secret
+    move_folder: processed
   smtp:
     server: smtp.gmail.com
     port: 465
